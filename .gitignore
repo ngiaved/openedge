@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Packer
+packer_cache/
+*.box
+iso/*
+**/iso/*
+
+# QEMU build output
+distro/builds/qemu/
+
+# Vagrant
+.vagrant/
+
+# Build outputs
+distro/builds/*
+!distro/builds/README.md

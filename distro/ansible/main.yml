@@ -1,0 +1,16 @@
+---
+- hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Install base system utilities.
+      apt:
+        name:
+          - git
+          - wget
+          - curl
+          - vim
+          - nfs-common
+        state: present
+        update_cache: yes
