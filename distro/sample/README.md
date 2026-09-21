@@ -3,6 +3,10 @@
 A self-contained sample you can point an `openedge` appliance at. It shows the
 three bits the appliance pulls at boot and the **standard names** it expects:
 
+> This is also the **default stack**: with zero configuration, an appliance built
+> from this repository downloads this `docker-compose.yml` at first boot and
+> runs `docker compose up -d`.
+
 | File | Standard appliance path | Purpose |
 | --- | --- | --- |
 | `docker-compose.yml` | `/opt/openedge/docker-compose.yml` | The bot / workload stack |

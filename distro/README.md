@@ -17,7 +17,7 @@ See the top-level [README](../README.md) for the project overview. The build pip
 4. **Base config** — `scripts/setup.sh` enables passwordless sudo for `vagrant` and disables unattended upgrades.
 5. **Docker** — `scripts/docker.sh` installs Docker Engine, the Compose plugin, and adds `vagrant` to the `docker` group.
 6. **Utilities** — the Ansible playbook (`ansible/main.yml`) installs base CLI tools and NFS client support.
-7. **Edge bootstrap** — `scripts/edge-bootstrap.sh` bakes the preconfigured compose source, environment and credentials into `/opt/openedge`; if static networking was chosen it writes `/etc/netplan/50-openedge.yaml` and an early apply unit; and when any boot step is configured it enables the boot service that runs the edge-login script, the user run-on-boot script, and fetches/starts the stack.
+7. **Edge bootstrap** — `scripts/edge-bootstrap.sh` bakes the preconfigured compose source, environment and credentials into `/opt/openedge`; if static networking was chosen it writes `/etc/netplan/50-openedge.yaml` and an early apply unit; and it enables the boot service that runs the edge-login script, the user run-on-boot script, and fetches/starts the stack. The service is **enabled by default**: with zero configuration the image downloads the [sample stack](sample/) at first boot and starts it with `docker compose up -d`.
 8. **Cleanup** — `scripts/cleanup.sh` removes Ansible and purges cached packages; `scripts/zero-disk.sh` additionally zeroes free space on VirtualBox builds only.
 9. **Package** — each builder produces its artifacts under `builds/` (see below).
 
@@ -45,9 +45,12 @@ The Ubuntu ISO is downloaded automatically from the Ubuntu archive; to use cache
 
 ## Preconfigure the image
 
-Optionally bake deployment settings into the appliance before building. The
-terminal menu runs fully offline and writes `openedge.auto.pkrvars.json`, which
-Packer loads automatically:
+Baking deployment settings into the image is **optional** — with no
+configuration at all the appliance still works out of the box: at first boot it
+downloads the [sample `docker-compose.yml`](sample/) over HTTP and runs
+`docker compose up -d`. Use the menu to point it at your own stack or to disable
+fetching. The terminal menu runs fully offline and writes
+`openedge.auto.pkrvars.json`, which Packer loads automatically:
 
 ```sh
 cd distro
@@ -59,7 +62,7 @@ The menu configures:
 
 | Setting | Purpose |
 | --- | --- |
-| Compose source | `http`, `s3` or `gcs` |
+| Compose source | `http` (default, points at the sample stack), `s3`, `gcs`, or `none` (disabled) |
 | Compose location | URL, or bucket + object key (plus optional S3 region) |
 | Environment variables | `KEY=VALUE` lines written to `/opt/openedge/.env` and interpolated by Compose |
 | Project & services | Optional Compose project name and a space-separated service filter |
@@ -78,8 +81,10 @@ under `/opt/openedge`. **No SSH or other remote access is required at runtime**
 — the appliance is self-contained. Credentials and the configuration live in
 `/opt/openedge` (mode `0600`).
 
-A self-contained example of all three artifacts is in
-[`sample/`](sample/), ready to host on any HTTP/S3/GCS endpoint.
+By default the source is `http` and the URL points at the
+[`sample/`](sample/) `docker-compose.yml` in this repository, so the boot
+service downloads it and starts the workload with **no configuration needed**.
+To disable fetching/starting a stack entirely, set the compose source to `none`.
 
 To inspect or script the configuration without the menu:
 

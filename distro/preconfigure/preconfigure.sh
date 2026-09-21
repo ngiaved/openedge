@@ -177,9 +177,9 @@ validation_warnings() {
       [ -n "$edge_compose_bucket" ] || warnings="${warnings}bucket is empty"$'\n'
       [ -n "$edge_compose_object" ] || warnings="${warnings}object path is empty"$'\n'
       ;;
-    *)
-      warnings="${warnings}unknown source '$edge_compose_source' (expected http, s3 or gcs)"$'\n'
-      ;;
+*)
+        warnings="${warnings}unknown source '$edge_compose_source' (expected http, s3, gcs or none)"$'\n'
+        ;;
   esac
   case "$edge_fetch_retries" in
     '' | *[!0-9]*) warnings="${warnings}retries must be a number"$'\n' ;;
@@ -217,7 +217,8 @@ show_summary() {
   echo "------------------------------------------------------------"
   echo " compose source ....... $edge_compose_source"
   case "$edge_compose_source" in
-    http) echo " compose url .......... ${edge_compose_url:-(unset)}" ;;
+    http) echo " compose url .......... ${edge_compose_url:-(default: sample repo)}" ;;
+    none) echo " compose ............... (disabled)" ;;
     s3)
       echo " bucket ............... ${edge_compose_bucket:-(unset)}"
       echo " object ............... ${edge_compose_object:-(unset)}"
@@ -307,13 +308,14 @@ ${l}"; fi
 }
 
 pick_source() {
-  printf 'Compose source: [1] http(s) url  [2] s3  [3] gcs  [b] back\n  choice: '
+  printf 'Compose source: [1] http(s) url  [2] s3  [3] gcs  [4] none (disabled)  [b] back\n  choice: '
   local choice
   IFS= read -r choice || true
   case "$choice" in
     1) edge_compose_source="http" ;;
     2) edge_compose_source="s3" ;;
     3) edge_compose_source="gcs" ;;
+    4) edge_compose_source="none" ;;
     *) return ;;
   esac
 }

@@ -11,7 +11,9 @@ The appliance is produced with [Packer](https://www.packer.io/).
 - Automated, unattended install of **Ubuntu 24.04 LTS** (`ubuntu2404.json`, autoinstall) or **Ubuntu 18.04** (`ubuntu1804.json`, preseed)
 - Docker Engine + Compose plugin pre-installed
 - Optional offline **preconfigure menu** to bake in a compose source (HTTP/S3/GCS), runtime parameters, a **static network (IP/mask/gateway/DNS)**, a **run-on-boot script** and an **edge-login script**
+- **Works out of the box**: with zero configuration, on first boot the appliance downloads a default `docker-compose.yml` (the [sample edge stack](distro/sample/)) over HTTP and starts it with `docker compose up -d`
 - At boot, the appliance registers/logs in the device (`edge-login.sh`), runs the user boot script (`runmeonboot`) and fetches `docker-compose.yml` from the configured source to start the stack — no remote access required
+- Override with a URL, or set the compose **source to `none`** to disable fetching/starting a stack
 - Standard names for the shipped artifacts: `docker-compose.yml`, `runmeonboot`, `edge-login.sh`
 - A ready-to-deploy [sample edge stack](distro/sample/) with all three artifacts
 - Default user has passwordless sudo and direct access to the `docker` group
@@ -62,7 +64,7 @@ qemu-system-x86_64 -m 1024 -smp 1 \
   -display cocoa
 ```
 
-Log in as `vagrant` / `vagrant` and check `docker --version`, `docker compose version`, `docker ps`. See the [distro README](distro/README.md) for details and configuration guidance.
+Log in as `vagrant` / `vagrant` and check `docker --version`, `docker compose version`, `docker ps`. Sampled: ~1 minute after boot the [sample stack](distro/sample/) is up — `docker logs -f hello-edge` shows the heartbeat. See the [distro README](distro/README.md) for details and configuration guidance.
 
 For the VirtualBox build, `vagrant up` from `distro/` boots the box, or import the generated OVA directly (`VBoxManage import distro/builds/virtualbox-ubuntu2404.ova`).
 

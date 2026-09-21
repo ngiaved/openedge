@@ -68,6 +68,8 @@ case "$EDGE_COMPOSE_SOURCE" in
   s3 | gcs)
     [ -n "$EDGE_COMPOSE_BUCKET" ] && [ -n "$EDGE_COMPOSE_OBJECT" ] && compose_configured=true
     ;;
+  none)
+    ;;
 esac
 
 if [ "$compose_configured" = true ]; then

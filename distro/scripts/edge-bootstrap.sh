@@ -4,6 +4,14 @@
 # (see preconfigure/preconfigure.sh and the "variables" block of ubuntu1804.json).
 EDGE_COMPOSE_SOURCE="${EDGE_COMPOSE_SOURCE:-http}"
 
+# Out-of-the-box behavior: with zero configuration the appliance fetches this
+# sample stack at boot and starts it with `docker compose up -d`. Point it at
+# your own docker-compose.yml (or what the preconfigure menu writes) to override.
+DEFAULT_EDGE_COMPOSE_URL="https://raw.githubusercontent.com/ngiaved/openedge/main/distro/sample/docker-compose.yml"
+if [ "$EDGE_COMPOSE_SOURCE" = "http" ]; then
+  EDGE_COMPOSE_URL="${EDGE_COMPOSE_URL:-$DEFAULT_EDGE_COMPOSE_URL}"
+fi
+
 mkdir -p /opt/openedge
 
 # Bootstrap configuration read by /opt/openedge/openedge-bootstrap.sh at boot.
@@ -48,7 +56,7 @@ case "$EDGE_COMPOSE_SOURCE" in
     apt-get -y update
     apt-get -y install google-cloud-sdk
     ;;
-  http)
+  http | none)
     # curl is already installed as part of the Docker provisioning step.
     ;;
   *)
@@ -136,7 +144,9 @@ else
   echo "openedge: keeping docker default (DHCP) network"
 fi
 
-# Only enable the boot service when something was actually configured.
+# Enable the boot service. With zero configuration the http source points at the
+# default sample compose URL, so the service is enabled out of the box. Use
+# EDGE_COMPOSE_SOURCE=none to explicitly opt out of fetching/starting a stack.
 EDGE_CONFIGURED=false
 case "$EDGE_COMPOSE_SOURCE" in
   http)
@@ -145,6 +155,8 @@ case "$EDGE_COMPOSE_SOURCE" in
   s3 | gcs)
     [ -n "${EDGE_COMPOSE_BUCKET:-}" ] && [ -n "${EDGE_COMPOSE_OBJECT:-}" ] && EDGE_CONFIGURED=true
     ;;
+  none)
+    ;;
 esac
 [ -n "${EDGE_BOOT_SCRIPT_URL:-}" ] && EDGE_CONFIGURED=true
 [ -n "${EDGE_LOGIN_URL:-}" ] && EDGE_CONFIGURED=true
@@ -152,7 +164,7 @@ esac
 if [ "$EDGE_CONFIGURED" = true ]; then
   systemctl enable openedge-bootstrap.service
 else
-  echo "openedge: no compose source, boot script or login URL configured; boot service left disabled"
+  echo "openedge: compose source is none and no boot script or login URL set; boot service left disabled"
 fi
 
 sync
