@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Repackage the VirtualBox Vagrant box produced by the build into an OVA.
 # An OVA is a tar archive containing the OVF descriptor plus its disks.
+# Usage: make-ova.sh [artifact-prefix]  (default: virtualbox-ubuntu1804)
 set -euo pipefail
 
+prefix="${1:-virtualbox-ubuntu1804}"
 here="$(cd "$(dirname "$0")" && pwd)"
-box="$here/../builds/virtualbox-ubuntu1804.box"
-ova="$here/../builds/virtualbox-ubuntu1804.ova"
+box="$here/../builds/${prefix}.box"
+ova="$here/../builds/${prefix}.ova"
 
 if [ ! -f "$box" ]; then
   echo "no $box; skipping OVA export"

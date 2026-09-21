@@ -1,0 +1,27 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  timezone: UTC
+  refresh-installer: false
+  updates: none
+  interactive-sections: []
+  identity:
+    hostname: vagrant
+    username: vagrant
+    password: "$6$JO7p0.a7SBrteOdH$XDJAZDwa4bKVQDi3wIwB3uFI6DJQb0AsIwxq7MBtJ90pi3ics/bHRhOMkqQc0REQVLR2XaiqQ/0NAr1ZJhIYY0"
+  ssh:
+    allow-pw: true
+    install-server: true
+  storage:
+    layout:
+      name: lvm
+  packages:
+    - openssh-server
+    - nfs-common
+  late-commands:
+    - "echo 'vagrant ALL=(ALL) NOPASSWD: ALL' > /target/etc/sudoers.d/99-vagrant"
+    - "chmod 440 /target/etc/sudoers.d/99-vagrant"
+  shutdown: reboot

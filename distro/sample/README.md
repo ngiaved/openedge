@@ -19,7 +19,7 @@ cd ..
 ./preconfigure/preconfigure.sh --set url=https://example.com/docker-compose.yml \
   --set boot_script_url=https://example.com/runmeonboot \
   --set login_url=https://example.com/edge-login.sh --save
-packer build ubuntu1804.json
+packer build ubuntu2404.json
 ```
 
 At boot the appliance runs, in order:

@@ -123,6 +123,10 @@ if [ "$EDGE_NET_MODE" = "static" ]; then
   } > /etc/netplan/50-openedge.yaml
   chmod 0600 /etc/netplan/50-openedge.yaml
   netplan generate
+  # Stop cloud-init from regenerating its own netplan over ours on first boot.
+  if [ -d /etc/cloud/cloud.cfg.d ]; then
+    printf 'network: {config: disabled}\n' > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+  fi
   install -m 0755 /tmp/configure-network.sh /opt/openedge/configure-network.sh
   install -m 0644 /tmp/configure-network.service /etc/systemd/system/configure-network.service
   systemctl daemon-reload

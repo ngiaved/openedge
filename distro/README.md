@@ -1,13 +1,18 @@
 # openedge distro build
 
-This directory contains the [Packer](https://www.packer.io/) source that builds the `openedge` virtual appliance: a minimal **Ubuntu 18.04 Server** virtual machine with **Docker Engine** pre-installed, packaged as a reusable appliance image.
+This directory contains the [Packer](https://www.packer.io/) source that builds the `openedge` virtual appliance: a minimal **Ubuntu Server** virtual machine with **Docker Engine** pre-installed, packaged as a reusable appliance image. Two templates are provided:
+
+| Template | OS | Installed with | Status |
+| --- | --- | --- | --- |
+| `ubuntu2404.json` | Ubuntu **24.04 LTS** (Noble) | Subiquity **autoinstall** (`http/user-data` + `meta-data`) | Recommended |
+| `ubuntu1804.json` | Ubuntu **18.04** (Bionic) | Debian-installer **preseed** (`http/preseed.cfg`) | Legacy (EOL since May 2023) |
 
 ## How the build works
 
 See the top-level [README](../README.md) for the project overview. The build pipeline is:
 
-1. **Preconfigure** (optional) — `preconfigure/preconfigure.sh` is a terminal menu that records where the edge `docker-compose.yml` lives and how to run it. It writes a Packer variable file consumed by the build.
-2. **Automated install** — Ubuntu Server 18.04.3 is installed unattended from the ISO using `http/preseed.cfg`, creating the default `vagrant` user.
+1. **Preconfigure** (optional) — `preconfigure/preconfigure.sh` is a terminal menu that records where the edge `docker-compose.yml` lives and how to run it. It writes a Packer variable file consumed by either template.
+2. **Automated install** — Ubuntu is installed unattended from the ISO: 24.04 via the cloud-init nocloud seed in `http/` (`user-data` + `meta-data`, kernel args `autoinstall ds=nocloud-net;s=http://...`), 18.04 via `http/preseed.cfg`. Both create the default `vagrant` user.
 3. **Ansible** — `scripts/ansible.sh` installs Ansible in the guest.
 4. **Base config** — `scripts/setup.sh` enables passwordless sudo for `vagrant` and disables unattended upgrades.
 5. **Docker** — `scripts/docker.sh` installs Docker Engine, the Compose plugin, and adds `vagrant` to the `docker` group.
@@ -16,12 +21,16 @@ See the top-level [README](../README.md) for the project overview. The build pip
 8. **Cleanup** — `scripts/cleanup.sh` removes Ansible and purges cached packages; `scripts/zero-disk.sh` additionally zeroes free space on VirtualBox builds only.
 9. **Package** — each builder produces its artifacts under `builds/` (see below).
 
-Two builders are defined in `ubuntu1804.json`, so the appliance can run on almost any hypervisor:
+Two builders are defined in each template, so the appliance can run on almost any hypervisor:
 
-| Builder | Artifact | Notes |
+| Template | Builder | Artifact |
 | --- | --- | --- |
-| `qemu` | `builds/qemu/openedge` (raw `qcow2`) | Runs on any host, including Apple Silicon via TCG emulation (slow); ideal for KVM/Proxmox/cloud |
-| `virtualbox-iso` | `builds/virtualbox-ubuntu1804.box` (Vagrant box) and `builds/virtualbox-ubuntu1804.ova` (OVA appliance) | Requires an x86_64 host, produces a VirtualBox image via the `vagrant` post-processor, then repackages it as OVA |
+| `ubuntu2404.json` | `qemu` | `builds/qemu-2404/openedge-2404` (raw `qcow2`) |
+| `ubuntu2404.json` | `virtualbox-iso` | `builds/virtualbox-ubuntu2404.box` + `builds/virtualbox-ubuntu2404.ova` |
+| `ubuntu1804.json` | `qemu` | `builds/qemu/openedge` (raw `qcow2`) |
+| `ubuntu1804.json` | `virtualbox-iso` | `builds/virtualbox-ubuntu1804.box` + `builds/virtualbox-ubuntu1804.ova` |
+
+The `qemu` builder runs on any host, including Apple Silicon via TCG emulation (slow); the `virtualbox-iso` builder requires an x86_64 host and produces the VirtualBox image via the `vagrant` post-processor, then repackages it as OVA.
 
 ## Requirements
 
@@ -32,7 +41,7 @@ On the build host:
 - [VirtualBox](https://www.virtualbox.org/) for the `virtualbox-iso` builder
 - [Vagrant](https://www.vagrantup.com/downloads) (only needed to test the built box)
 
-The Ubuntu ISO is downloaded automatically from the Ubuntu archive; to use a cached copy instead, place it at `iso/ubuntu-18.04.3-server-amd64.iso`. A checksum is pinned in `ubuntu1804.json`, so the source ISO is always verified.
+The Ubuntu ISO is downloaded automatically from the Ubuntu archive; to use cached copies instead, place them at `iso/ubuntu-24.04.5-live-server-amd64.iso` (24.04) and/or `iso/ubuntu-18.04.3-server-amd64.iso` (18.04). A checksum is pinned in each template, so the source ISO is always verified.
 
 ## Preconfigure the image
 
@@ -43,7 +52,7 @@ Packer loads automatically:
 ```sh
 cd distro
 ./preconfigure/preconfigure.sh
-packer build ubuntu1804.json      # picks up openedge.auto.pkrvars.json
+packer build ubuntu2404.json      # picks up openedge.auto.pkrvars.json
 ```
 
 The menu configures:
@@ -97,12 +106,13 @@ packer plugins install github.com/hashicorp/vagrant      # one-time, for Virtual
 packer plugins install github.com/hashicorp/qemu         # one-time, for QEMU builds
 packer plugins install github.com/hashicorp/ansible      # one-time (ansible-local provisioner)
 
-# Build everything (both builders run in parallel):
-packer build ubuntu1804.json
+# Ubuntu 24.04 LTS (recommended):
+packer build ubuntu2404.json
+packer build -only qemu ubuntu2404.json
+packer build -only virtualbox-iso ubuntu2404.json
 
-# Build a single target:
-packer build -only qemu ubuntu1804.json
-packer build -only virtualbox-iso ubuntu1804.json
+# Legacy Ubuntu 18.04:
+packer build ubuntu1804.json
 ```
 
 > **Apple Silicon note:** the `qemu` builder works on ARM Macs through full TCG emulation, but is **very slow** — budget for a long build. The `virtualbox-iso` builder cannot run x86_64 guests on ARM hosts.
@@ -119,9 +129,7 @@ The included `Vagrantfile` boots the VirtualBox box and verifies that `docker --
 
 ### OVA (`virtualbox-iso` build)
 
-The OVA (`builds/virtualbox-ubuntu1804.ova`) is produced automatically alongside
-the box. Import it into VirtualBox (File ▸ Import Appliance, or double-click it,
-or `VBoxManage import builds/virtualbox-ubuntu1804.ova`), start the machine, and
+The OVA is produced automatically alongside the box (`builds/virtualbox-ubuntu2404.ova` for 24.04, `builds/virtualbox-ubuntu1804.ova` for 18.04). Import it into VirtualBox (File ▸ Import Appliance, or double-click it, or `VBoxManage import builds/virtualbox-ubuntu2404.ova`), start the machine, and
 log in as `vagrant` / `vagrant`. The OVA embeds the same VirtualBox image, so it
 behaves identically to `vagrant up`.
 
@@ -133,9 +141,11 @@ Boot the `qcow2` directly with QEMU:
 qemu-system-x86_64 -m 1024 -smp 1 \
   -machine q35,accel=tcg \
   -netdev user,id=net0 -device e1000,netdev=net0 \
-  -drive file=builds/qemu/openedge,format=qcow2,if=virtio \
+  -drive file=builds/qemu-2404/openedge-2404,format=qcow2,if=virtio \
   -display cocoa
 ```
+
+(For the 18.04 build, point `-drive` at `builds/qemu/openedge`.)
 
 - `-display cocoa` opens the macOS GUI window; swap for `-nographic` for a serial console.
 - On Apple Silicon this runs through full TCG emulation, so expect it to be slow.
@@ -182,7 +192,7 @@ Beyond that, everyday configuration is done at runtime. Common tasks:
 
 For reproducible, fleet-style configuration, layer a provisioning tool (Ansible, cloud-init, or a config-management agent) on top of SSH — the box has Ansible purged from the final image, so install it on the control machine and use a `remote_user: vagrant` playbook.
 
-If you need to change what's baked into the image itself, edit the defaults in `ubuntu1804.json` and `scripts/*.sh`; deployment settings are best changed with the preconfigure menu rather than by hand. The device name, hostname, and user come from `netcfg/get_hostname` plus the `preseed.cfg` user spec; the memory/CPU and disk size come from the builder settings (currently 1–2 vCPU, 1–2 GB RAM, 80 GB disk).
+If you need to change what's baked into the image itself, edit the defaults in the packer template (`ubuntu2404.json` / `ubuntu1804.json`) and `scripts/*.sh`; deployment settings are best changed with the preconfigure menu rather than by hand. The device hostname and user come from the installer answers (`identity` in `http/user-data` for 24.04, `netcfg/get_hostname` plus `preseed.cfg` for 18.04); the memory/CPU and disk size come from the builder settings (currently 1–2 vCPU, 1–2 GB RAM, 80 GB disk).
 
 ## Default credentials
 
@@ -197,4 +207,4 @@ The appliance ships with a standard development-box account:
 
 Change these before deploying anywhere untrusted.
 
-> **Note:** Ubuntu 18.04 (Bionic) reached end-of-life on 31 May 2023. For new deployments, prefer a still-supported LTS and update `iso_urls`, the checksum, and the release codename in `ubuntu1804.json` accordingly.
+> **Note:** Ubuntu 18.04 (Bionic) reached end-of-life on 31 May 2023 and 24.04 (Noble) is supported until 2029 — for new deployments use `ubuntu2404.json`. To bump the 24.04 point release, update `iso_urls` and the checksum in `ubuntu2404.json`.
