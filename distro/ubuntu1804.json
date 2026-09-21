@@ -1,4 +1,24 @@
 {
+  "variables": {
+    "edge_compose_source": "http",
+    "edge_compose_url": "",
+    "edge_compose_bucket": "",
+    "edge_compose_object": "",
+    "edge_compose_project": "",
+    "edge_compose_services": "",
+    "edge_fetch_retries": "5",
+    "edge_fetch_delay": "15",
+    "edge_s3_region": "",
+    "edge_compose_env_b64": "",
+    "edge_cloud_credentials_b64": "",
+    "edge_net_mode": "dhcp",
+    "edge_net_address": "",
+    "edge_net_netmask": "",
+    "edge_net_gateway": "",
+    "edge_net_dns": "",
+    "edge_boot_script_url": "",
+    "edge_login_url": ""
+  },
   "builders": [
     {
       "type": "qemu",
@@ -124,13 +144,26 @@
     }
   ],
   "post-processors": [
-    {
-      "output": "builds/{{.Provider}}-ubuntu1804.box",
-      "type": "vagrant",
-      "only": [
-        "virtualbox-iso"
-      ]
-    }
+    [
+      {
+        "output": "builds/{{.Provider}}-ubuntu1804.box",
+        "type": "vagrant",
+        "only": [
+          "virtualbox-iso"
+        ]
+      },
+      {
+        "execute_command": [
+          "bash",
+          "{{.Script}}"
+        ],
+        "script": "scripts/make-ova.sh",
+        "type": "shell-local",
+        "only": [
+          "virtualbox-iso"
+        ]
+      }
+    ]
   ],
   "provisioners": [
     {
@@ -146,6 +179,51 @@
     {
       "execute_command": "echo 'vagrant' | {{.Vars}} sudo -S -E bash '{{.Path}}'",
       "script": "scripts/docker.sh",
+      "type": "shell"
+    },
+    {
+      "destination": "/tmp/openedge-bootstrap.sh",
+      "source": "scripts/openedge-bootstrap.sh",
+      "type": "file"
+    },
+    {
+      "destination": "/tmp/openedge-bootstrap.service",
+      "source": "scripts/openedge-bootstrap.service",
+      "type": "file"
+    },
+    {
+      "destination": "/tmp/configure-network.sh",
+      "source": "scripts/configure-network.sh",
+      "type": "file"
+    },
+    {
+      "destination": "/tmp/configure-network.service",
+      "source": "scripts/configure-network.service",
+      "type": "file"
+    },
+    {
+      "environment_vars": [
+        "EDGE_COMPOSE_SOURCE={{user `edge_compose_source`}}",
+        "EDGE_COMPOSE_URL={{user `edge_compose_url`}}",
+        "EDGE_COMPOSE_BUCKET={{user `edge_compose_bucket`}}",
+        "EDGE_COMPOSE_OBJECT={{user `edge_compose_object`}}",
+        "EDGE_COMPOSE_PROJECT={{user `edge_compose_project`}}",
+        "EDGE_COMPOSE_SERVICES={{user `edge_compose_services`}}",
+        "EDGE_FETCH_RETRIES={{user `edge_fetch_retries`}}",
+        "EDGE_FETCH_DELAY={{user `edge_fetch_delay`}}",
+        "EDGE_S3_REGION={{user `edge_s3_region`}}",
+        "EDGE_COMPOSE_ENV_B64={{user `edge_compose_env_b64`}}",
+        "EDGE_CLOUD_CREDENTIALS_B64={{user `edge_cloud_credentials_b64`}}",
+        "EDGE_NET_MODE={{user `edge_net_mode`}}",
+        "EDGE_NET_ADDRESS={{user `edge_net_address`}}",
+        "EDGE_NET_NETMASK={{user `edge_net_netmask`}}",
+        "EDGE_NET_GATEWAY={{user `edge_net_gateway`}}",
+        "EDGE_NET_DNS={{user `edge_net_dns`}}",
+        "EDGE_BOOT_SCRIPT_URL={{user `edge_boot_script_url`}}",
+        "EDGE_LOGIN_URL={{user `edge_login_url`}}"
+      ],
+      "execute_command": "echo 'vagrant' | {{.Vars}} sudo -S -E bash '{{.Path}}'",
+      "script": "scripts/edge-bootstrap.sh",
       "type": "shell"
     },
     {

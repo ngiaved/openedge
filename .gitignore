@@ -16,3 +16,7 @@ distro/builds/qemu/
 # Build outputs
 distro/builds/*
 !distro/builds/README.md
+
+# Preconfigure output
+distro/openedge.auto.pkrvars.json
+distro/preconfigure/.state

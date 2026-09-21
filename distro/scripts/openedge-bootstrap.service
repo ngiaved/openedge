@@ -1,0 +1,13 @@
+[Unit]
+Description=openedge compose bootstrap (fetch and start the edge stack)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/openedge/openedge-bootstrap.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

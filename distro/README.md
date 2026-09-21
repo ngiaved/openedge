@@ -6,20 +6,22 @@ This directory contains the [Packer](https://www.packer.io/) source that builds 
 
 See the top-level [README](../README.md) for the project overview. The build pipeline is:
 
-1. **Automated install** — Ubuntu Server 18.04.3 is installed unattended from the ISO using `http/preseed.cfg`, creating the default `vagrant` user.
-2. **Ansible** — `scripts/ansible.sh` installs Ansible in the guest.
-3. **Base config** — `scripts/setup.sh` enables passwordless sudo for `vagrant` and disables unattended upgrades.
-4. **Docker** — `scripts/docker.sh` installs Docker Engine, the Compose plugin, and adds `vagrant` to the `docker` group.
-5. **Utilities** — the Ansible playbook (`ansible/main.yml`) installs base CLI tools and NFS client support.
-6. **Cleanup** — `scripts/cleanup.sh` removes Ansible and purges cached packages; `scripts/zero-disk.sh` additionally zeroes free space on VirtualBox builds only.
-7. **Package** — each builder produces its artifact under `builds/` (see below).
+1. **Preconfigure** (optional) — `preconfigure/preconfigure.sh` is a terminal menu that records where the edge `docker-compose.yml` lives and how to run it. It writes a Packer variable file consumed by the build.
+2. **Automated install** — Ubuntu Server 18.04.3 is installed unattended from the ISO using `http/preseed.cfg`, creating the default `vagrant` user.
+3. **Ansible** — `scripts/ansible.sh` installs Ansible in the guest.
+4. **Base config** — `scripts/setup.sh` enables passwordless sudo for `vagrant` and disables unattended upgrades.
+5. **Docker** — `scripts/docker.sh` installs Docker Engine, the Compose plugin, and adds `vagrant` to the `docker` group.
+6. **Utilities** — the Ansible playbook (`ansible/main.yml`) installs base CLI tools and NFS client support.
+7. **Edge bootstrap** — `scripts/edge-bootstrap.sh` bakes the preconfigured compose source, environment and credentials into `/opt/openedge`; if static networking was chosen it writes `/etc/netplan/50-openedge.yaml` and an early apply unit; and when any boot step is configured it enables the boot service that runs the edge-login script, the user run-on-boot script, and fetches/starts the stack.
+8. **Cleanup** — `scripts/cleanup.sh` removes Ansible and purges cached packages; `scripts/zero-disk.sh` additionally zeroes free space on VirtualBox builds only.
+9. **Package** — each builder produces its artifacts under `builds/` (see below).
 
 Two builders are defined in `ubuntu1804.json`, so the appliance can run on almost any hypervisor:
 
 | Builder | Artifact | Notes |
 | --- | --- | --- |
 | `qemu` | `builds/qemu/openedge` (raw `qcow2`) | Runs on any host, including Apple Silicon via TCG emulation (slow); ideal for KVM/Proxmox/cloud |
-| `virtualbox-iso` | `builds/virtualbox-ubuntu1804.box` (Vagrant box) | Requires an x86_64 host, produces VirtualBox image via the `vagrant` post-processor |
+| `virtualbox-iso` | `builds/virtualbox-ubuntu1804.box` (Vagrant box) and `builds/virtualbox-ubuntu1804.ova` (OVA appliance) | Requires an x86_64 host, produces a VirtualBox image via the `vagrant` post-processor, then repackages it as OVA |
 
 ## Requirements
 
@@ -31,6 +33,59 @@ On the build host:
 - [Vagrant](https://www.vagrantup.com/downloads) (only needed to test the built box)
 
 The Ubuntu ISO is downloaded automatically from the Ubuntu archive; to use a cached copy instead, place it at `iso/ubuntu-18.04.3-server-amd64.iso`. A checksum is pinned in `ubuntu1804.json`, so the source ISO is always verified.
+
+## Preconfigure the image
+
+Optionally bake deployment settings into the appliance before building. The
+terminal menu runs fully offline and writes `openedge.auto.pkrvars.json`, which
+Packer loads automatically:
+
+```sh
+cd distro
+./preconfigure/preconfigure.sh
+packer build ubuntu1804.json      # picks up openedge.auto.pkrvars.json
+```
+
+The menu configures:
+
+| Setting | Purpose |
+| --- | --- |
+| Compose source | `http`, `s3` or `gcs` |
+| Compose location | URL, or bucket + object key (plus optional S3 region) |
+| Environment variables | `KEY=VALUE` lines written to `/opt/openedge/.env` and interpolated by Compose |
+| Project & services | Optional Compose project name and a space-separated service filter |
+| Fetch retries | How many times to retry the fetch and how many seconds to wait between attempts |
+| Credentials | Optional static S3 keys or a minified GCS service-account JSON (blank uses the instance/IAM/ADC default) |
+| Network | `dhcp` (default) or `static` with **IP address, netmask, gateway and DNS servers** |
+| Run-on-boot script | URL of the user script fetched and executed on every boot (saved as `/opt/openedge/runmeonboot`) |
+| Edge login script | URL of the device registration/login script run at boot (saved as `/opt/openedge/edge-login.sh`) |
+
+At boot the image runs `openedge-bootstrap.service`, which waits for Docker and
+the network, then runs — in order — the edge-login script, the run-on-boot
+script and finally fetches `docker-compose.yml` from the configured source
+(retrying on failure) and runs `docker compose up -d`. Each artifact keeps a
+**standard name**: `edge-login.sh`, `runmeonboot` and `docker-compose.yml`, all
+under `/opt/openedge`. **No SSH or other remote access is required at runtime**
+— the appliance is self-contained. Credentials and the configuration live in
+`/opt/openedge` (mode `0600`).
+
+A self-contained example of all three artifacts is in
+[`sample/`](sample/), ready to host on any HTTP/S3/GCS endpoint.
+
+To inspect or script the configuration without the menu:
+
+```sh
+./preconfigure/preconfigure.sh --set source=s3 --set bucket=my-bucket \
+  --set object=stacks/edge/docker-compose.yml --dump
+```
+
+`--set` accepts `source`, `url`, `bucket`, `object`, `project`, `services`,
+`retries`, `delay`, `region`, `env`, `credentials`, `net_mode`, `net_address`,
+`net_netmask`, `net_gateway`, `net_dns`, `boot_script_url` and `login_url`.
+Without `--dump` it saves the settings; `--save` writes them explicitly.
+
+> The image only installs the fetch tool it needs: `curl` for `http`, AWS CLI for
+> `s3`, and the Google Cloud SDK (`gsutil`) for `gcs`.
 
 ## Build
 
@@ -62,6 +117,14 @@ vagrant up
 
 The included `Vagrantfile` boots the VirtualBox box and verifies that `docker --version` and `docker compose version` are available inside the appliance.
 
+### OVA (`virtualbox-iso` build)
+
+The OVA (`builds/virtualbox-ubuntu1804.ova`) is produced automatically alongside
+the box. Import it into VirtualBox (File ▸ Import Appliance, or double-click it,
+or `VBoxManage import builds/virtualbox-ubuntu1804.ova`), start the machine, and
+log in as `vagrant` / `vagrant`. The OVA embeds the same VirtualBox image, so it
+behaves identically to `vagrant up`.
+
 ### QEMU image (`qemu` build)
 
 Boot the `qcow2` directly with QEMU:
@@ -83,20 +146,43 @@ Log in as `vagrant` (password `vagrant`) and verify:
 docker --version
 docker compose version
 docker ps
+systemctl status openedge-bootstrap
 ```
 
 ## Configuring the appliance
 
-The image ships as a stock development box; everyday configuration is done at runtime. Common tasks:
+If you ran the preconfigure menu, the edge stack is already configured: the
+appliance fetches and starts it automatically at boot. The relevant files are:
+
+| Path | Purpose |
+| --- | --- |
+| `/opt/openedge/bootstrap.conf` | Compose source, network, boot/login script and runtime settings |
+| `/opt/openedge/.env` | Container environment overrides |
+| `/opt/openedge/cloud-creds.conf` | Optional S3/GCS credentials (mode `0600`) |
+| `/opt/openedge/openedge-bootstrap.sh` | Boot script: edge-login, runmeonboot, compose fetch/up |
+| `/opt/openedge/edge-login.sh` | Device registration/login script (fetched at boot) |
+| `/opt/openedge/runmeonboot` | User run-on-boot script (fetched at boot) |
+| `/opt/openedge/docker-compose.yml` | The bot/workload stack (fetched at boot) |
+| `/opt/openedge/configure-network.sh` | Applies the static netplan early at boot (static mode only) |
+| `/etc/netplan/50-openedge.yaml` | Static network config baked at build time (static mode only) |
+
+Re-run the bootstrap after changing settings (this refetches the compose file):
+
+```sh
+sudo systemctl restart openedge-bootstrap
+sudo journalctl -u openedge-bootstrap
+```
+
+Beyond that, everyday configuration is done at runtime. Common tasks:
 
 - **Change the password** — `passwd vagrant` (or `sudo passwd root`), then SSH in with `ssh vagrant@<host>`.
-- **Static IP / networking** — edit `/etc/netplan/*.yaml` and `sudo netplan apply`, or use your hypervisor's port-forwarding/NAT rules.
+- **Static IP / networking** — set this with the preconfigure menu (`net_mode=static`, plus address, netmask, gateway and DNS); it's baked into `/etc/netplan/50-openedge.yaml` and applied early at boot. To change it at runtime, edit `/etc/netplan/50-openedge.yaml` and `sudo netplan apply`, or use your hypervisor's port-forwarding/NAT rules, or `net_mode=dhcp` if the appliance should keep DHCP.
 - **Deploy applications** — run containers as the `vagrant` user (it's in the `docker` group), e.g. `docker run -d -p 8080:80 nginx`; describe multi-container apps with `docker compose`.
 - **System packages** — `sudo apt-get update && sudo apt-get install <pkg>`.
 
 For reproducible, fleet-style configuration, layer a provisioning tool (Ansible, cloud-init, or a config-management agent) on top of SSH — the box has Ansible purged from the final image, so install it on the control machine and use a `remote_user: vagrant` playbook.
 
-If you need to change what's baked into the image itself, edit the defaults in `ubuntu1804.json` and `scripts/*.sh`: the device name, hostname, and user come from `netcfg/get_hostname` plus the `preseed.cfg` user spec; the memory/CPU and disk size come from the builder settings (currently 1–2 vCPU, 1–2 GB RAM, 80 GB disk).
+If you need to change what's baked into the image itself, edit the defaults in `ubuntu1804.json` and `scripts/*.sh`; deployment settings are best changed with the preconfigure menu rather than by hand. The device name, hostname, and user come from `netcfg/get_hostname` plus the `preseed.cfg` user spec; the memory/CPU and disk size come from the builder settings (currently 1–2 vCPU, 1–2 GB RAM, 80 GB disk).
 
 ## Default credentials
 

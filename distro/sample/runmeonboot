@@ -1,0 +1,19 @@
+#!/bin/bash
+# Sample run-on-boot script for the openedge appliance.
+#
+# The appliance fetches this file (via the URL configured in preconfigure) on
+# every boot, saves it as /opt/openedge/runmeonboot and executes it before the
+# docker stack is started. Use it to prepare the host: mount volumes, write
+# secrets, tune sysctls, warm caches, etc. Keep it idempotent - it runs every
+# boot. Failures are logged but do not stop the compose bring-up.
+set -eu
+
+LOG=/var/log/openedge-runmeonboot.log
+
+{
+  echo "============================================================"
+  echo "[runmeonboot] started at $(date -u +%FT%TZ) on $(hostname)"
+  echo "[runmeonboot] docker       : $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo n/a)"
+  echo "[runmeonboot] disk free    : $(df -h / | awk 'NR==2{print $4}')"
+  echo "[runmeonboot] running ok"
+} | tee -a "$LOG"

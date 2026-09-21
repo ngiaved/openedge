@@ -1,0 +1,13 @@
+services:
+  hello-edge:
+    image: busybox:latest
+    container_name: hello-edge
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - >
+        while true; do
+          echo "[hello-edge] hello from $(hostname) at $(date -u +%FT%TZ)";
+          sleep 60;
+        done
