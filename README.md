@@ -38,6 +38,21 @@ packer build -only qemu ubuntu1804.json
 
 The QEMU appliance lands in `distro/builds/qemu/`. On an x86_64 host you can also build the VirtualBox box with `packer build -only virtualbox-iso ubuntu1804.json`; see the distro README.
 
+## Testing
+
+Boot the QEMU image directly, or `vagrant up` the VirtualBox box from `distro/`:
+
+```sh
+cd distro
+qemu-system-x86_64 -m 1024 -smp 1 \
+  -machine q35,accel=tcg \
+  -netdev user,id=net0 -device e1000,netdev=net0 \
+  -drive file=builds/qemu/openedge,format=qcow2,if=virtio \
+  -display cocoa
+```
+
+Log in as `vagrant` / `vagrant` and check `docker --version`, `docker compose version`, `docker ps`. See the [distro README](distro/README.md) for details and configuration guidance.
+
 > **Apple Silicon note:** the `qemu` builder works on ARM Macs through full TCG emulation, but the build is very slow. The `virtualbox-iso` builder requires an x86_64 host.
 
 ## Requirements

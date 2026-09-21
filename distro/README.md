@@ -52,13 +52,51 @@ packer build -only virtualbox-iso ubuntu1804.json
 
 > **Apple Silicon note:** the `qemu` builder works on ARM Macs through full TCG emulation, but is **very slow** — budget for a long build. The `virtualbox-iso` builder cannot run x86_64 guests on ARM hosts.
 
-## Test the built box
+## Test the built image
+
+### VirtualBox box (`virtualbox-iso` build)
 
 ```sh
 vagrant up
 ```
 
 The included `Vagrantfile` boots the VirtualBox box and verifies that `docker --version` and `docker compose version` are available inside the appliance.
+
+### QEMU image (`qemu` build)
+
+Boot the `qcow2` directly with QEMU:
+
+```sh
+qemu-system-x86_64 -m 1024 -smp 1 \
+  -machine q35,accel=tcg \
+  -netdev user,id=net0 -device e1000,netdev=net0 \
+  -drive file=builds/qemu/openedge,format=qcow2,if=virtio \
+  -display cocoa
+```
+
+- `-display cocoa` opens the macOS GUI window; swap for `-nographic` for a serial console.
+- On Apple Silicon this runs through full TCG emulation, so expect it to be slow.
+
+Log in as `vagrant` (password `vagrant`) and verify:
+
+```sh
+docker --version
+docker compose version
+docker ps
+```
+
+## Configuring the appliance
+
+The image ships as a stock development box; everyday configuration is done at runtime. Common tasks:
+
+- **Change the password** — `passwd vagrant` (or `sudo passwd root`), then SSH in with `ssh vagrant@<host>`.
+- **Static IP / networking** — edit `/etc/netplan/*.yaml` and `sudo netplan apply`, or use your hypervisor's port-forwarding/NAT rules.
+- **Deploy applications** — run containers as the `vagrant` user (it's in the `docker` group), e.g. `docker run -d -p 8080:80 nginx`; describe multi-container apps with `docker compose`.
+- **System packages** — `sudo apt-get update && sudo apt-get install <pkg>`.
+
+For reproducible, fleet-style configuration, layer a provisioning tool (Ansible, cloud-init, or a config-management agent) on top of SSH — the box has Ansible purged from the final image, so install it on the control machine and use a `remote_user: vagrant` playbook.
+
+If you need to change what's baked into the image itself, edit the defaults in `ubuntu1804.json` and `scripts/*.sh`: the device name, hostname, and user come from `netcfg/get_hostname` plus the `preseed.cfg` user spec; the memory/CPU and disk size come from the builder settings (currently 1–2 vCPU, 1–2 GB RAM, 80 GB disk).
 
 ## Default credentials
 
